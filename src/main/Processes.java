@@ -24,9 +24,8 @@ public class Processes
 			}
 			else
 			{
-				p = Runtime.getRuntime().exec("ps -e -v");
+				p = Runtime.getRuntime().exec("ps -ax | grep .jar");
 			}
-			
 			if(p == null)
 			{
 				return false;
@@ -56,11 +55,29 @@ public class Processes
 	 */
 	public boolean getIsProcessRunning(String processName)
 	{
+		System.out.println(processes);
 		if(processes.contains(processName))
 		{
 			return true;
 		}
 		return false;
+	}
+	
+	public void loopCheckRunningProcess(String check, int tries)
+	{
+    	int updateChecks = 0;
+    	while(updateRunningProcesses())
+    	{
+    		if(!getIsProcessRunning(check) || updateChecks > tries) break;
+    		Main.frame.addLine("Please close all Minecraft Processes");
+        	try {
+    			Thread.sleep(2500);
+    		} catch (InterruptedException e) 
+    		{
+    			e.printStackTrace();
+    		}
+        	updateChecks++;
+    	}
 	}
 	
 	public String getProcesses()

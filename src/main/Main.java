@@ -5,116 +5,75 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
 
+import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
+import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.text.DefaultCaret;
 
 public class Main 
 {
+	public static final FileFrame frame = new FileFrame();
 	
-    public static void main(String[] par0ArrayOfStr)
+    public static void main(String[] args)
     {
-    	boolean pause = false;
     	Processes pro = new Processes();
-    	FileFrame frame = new FileFrame();
+    	Properties properties = new Properties();
     	frame.addWindowListener(new WindowListener());
-    	List<String> namesToLookFor = new ArrayList<String>();
-    	List<File> filesToMove = new ArrayList<File>();
-    	File baseFolder = null;
-    	String dispTitle = "Minecraft";
-    	for(int i = 0;i < par0ArrayOfStr.length;i++)
+    	
+    	properties.parseOptionArguments(args);  	
+    	
+    	pro.loopCheckRunningProcess(properties.Closer, 20);
+    	
+    	boolean success = attemptRemove(5, properties.namesToLookFor, properties.baseFolder, frame);
+    	
+    	while (!success)
     	{
-    		if(par0ArrayOfStr[i].matches("-s"))
+    		frame.retryButton.setEnabled(true);
+    		frame.progressbar.setString("Auto-retry stopped, press retry button or remove manually");
+    		frame.closeButton.setEnabled(true);
+    		if(frame.retry)
     		{
-    			String params = par0ArrayOfStr[i + 1];
-    			while(params.contains(","))
-    			{
-    				namesToLookFor.add(params.substring(0, params.indexOf(",")));
-    				params = params.substring(params.indexOf(",") + 1);
-    			}
-    			namesToLookFor.add(params);
-    		}
-    		if(par0ArrayOfStr[i].matches("-m"))
-    		{
-    			String params = par0ArrayOfStr[i + 1];
-    			while(params.contains(","))
-    			{
-    				filesToMove.add(new File(params.substring(0, params.indexOf(","))));
-    				params = params.substring(params.indexOf(",") + 1);
-    			}
-    			filesToMove.add(new File(params));
-    		}
-    		if(par0ArrayOfStr[i].matches("-f"))
-    		{
-    			baseFolder = new File(par0ArrayOfStr[i + 1]);
-    		}
-    		if(par0ArrayOfStr[i].matches("-p"))
-    		{
-    			pause = true;;
-    		}
-    		if(par0ArrayOfStr[i].matches("-t"))
-    		{
-    			dispTitle = par0ArrayOfStr[i + 1];
+    			frame.retry = false;
+    			frame.retryButton.setEnabled(false);
+    			frame.closeButton.setEnabled(false);
+    			success = attemptRemove(1, properties.namesToLookFor, properties.baseFolder, frame);
     		}
     	}
-    	try
-    	{
-    		frame.progressbar.setString("Read information");
-    		frame.progressbar.setStringPainted(true);
-    		frame.addLine("Information read");
-    		if(baseFolder != null)
-    		{
-    			frame.addLine("Minecraft base folder: " + baseFolder.getCanonicalPath());
-    		}
-    		String names = "";
-    		for(String str : namesToLookFor)
-    		{
-    			names += str;
-    			names += ",";
-    		}
-    		if(names.length() > 0)
-    		{
-    			frame.addLine("Strings to look for and remove: " + names.substring(0, names.length() - 1));
-    		}
-    		frame.addLine("Number of files to move: " + new Integer(filesToMove.size()).toString());
-    	} catch(Exception e)
-    	{
-    		e.printStackTrace();
-    	}
+    	frame.progressbar.setString("Moving file to mods folder");
+
+    	attemptToMoveFiles(properties.filesToMove, properties.baseFolder);
     	
-    	int maxTries = 5;
+		frame.progressbar.setValue(100);
+    	frame.progressbar.setString("Completed");
+    	frame.closeButton.setEnabled(true);
+    	try {
+			Thread.sleep(2500);
+		} catch (InterruptedException e) 
+		{
+			e.printStackTrace();
+		}
+    	System.gc();
+    	if (!properties.pause) System.exit(0);
     	
-    	while(pro.updateRunningProcesses())
-    	{
-    		if(!pro.getIsProcessRunning(dispTitle)) break;
-    		if(pro.getOS().toLowerCase().indexOf("win") < 0)
-    		{
-        		frame.addLine("This feature is developed under windows \n\rand therefore this feature has not been tested in other OS's");
-        		frame.addLine("Skipping program check for now");
-        		frame.addLine("Increasing max-trycount to 20");
-        		maxTries = 20;
-        		break;
-    		}
-    		frame.addLine("Please close all windows with title: " + dispTitle);
-        	try {
-    			Thread.sleep(2500);
-    		} catch (InterruptedException e) 
-    		{
-    			e.printStackTrace();
-    		}
-    	}
-    	
+    }
+    
+    private static boolean attemptRemove(int attempts, List<String> namesToLookFor, File baseFolder, FileFrame frame)
+    {
     	int tries = 1;
-    	while(tries <= maxTries)
+    	while(tries <= attempts)
     	{
-    		frame.progressbar.setString("Removing files: attempt " + new Integer(tries).toString() + " of " + new Integer(maxTries).toString());
+    		frame.progressbar.setString("Removing files: attempt " + new Integer(tries).toString() + " of " + new Integer(attempts).toString());
     		if(baseFolder == null)
     			break;
 			try
@@ -137,6 +96,7 @@ public class Main
 							}
 							else
 							{
+								frame.addLine(Boolean.toString(f.canRead()));
 								System.out.println("Failed to remove " + f.getName());
 								frame.addLine("Failed to remove " + f.getName());
 								failed = true;
@@ -147,14 +107,14 @@ public class Main
 				if(failed)
 				{
 					System.out.println("Due to fail now waiting 3 seconds.");
-					frame.addLine("Failed to copy... attempt " + new Integer(tries).toString() + " of  " + new Integer(maxTries).toString());
+					frame.addLine("Failed to copy... attempt " + new Integer(tries).toString() + " of  " + new Integer(attempts).toString());
 					tries++;
 					Thread.sleep(3000);
 					continue;
 				}
 				else
 				{
-					break;
+					return true;
 				}
 			}
 			catch(Exception e)
@@ -162,7 +122,11 @@ public class Main
 				e.printStackTrace();
 			}
     	}
-    	frame.progressbar.setString("Moving file to mods folder");
+    	return false;
+    }
+    
+    private static void attemptToMoveFiles(List<File> filesToMove, File baseFolder)
+    {
 		for(int fileNumber = 0;fileNumber < filesToMove.size();fileNumber++)
 		{
 			File f = filesToMove.get(fileNumber);
@@ -171,7 +135,10 @@ public class Main
 			if(destinationFile.exists())
 			{
 				frame.addLine("Found another instance of " + f.getName() + ". Attempting to overwrite...");
-				destinationFile.delete();
+				if(!destinationFile.delete())
+				{
+					frame.addLine("Failed to overwrite " + destinationFile.getName());
+				}
 			}
 			if(f.renameTo(new File(baseFolder, "mods/" + f.getName())))
 			{
@@ -179,23 +146,18 @@ public class Main
 				frame.addLine("Successfully moved " + f.getName() + " to mods directory");
 			}
 		}
-		frame.progressbar.setValue(100);
-    	frame.progressbar.setString("Completed");
-    	try {
-			Thread.sleep(2500);
-		} catch (InterruptedException e) 
-		{
-			e.printStackTrace();
-		}
-    	if (!pause) System.exit(0);
     }
     
-    static class FileFrame extends JFrame
+    static class FileFrame extends JFrame implements ActionListener
     {
 		private static final long serialVersionUID = 1L;
 		
 		public JProgressBar progressbar = new JProgressBar();
 		public JTextArea log = new JTextArea();
+		public JButton retryButton = new JButton("retry");
+		public JButton closeButton = new JButton("close");
+		
+		boolean retry = false;
 		
     	public FileFrame()
     	{
@@ -208,7 +170,21 @@ public class Main
     		c.fill = GridBagConstraints.BOTH;
     		
     		progressbar.setPreferredSize(new Dimension(400, 25));
-    		log.setPreferredSize(new Dimension(400, 125));
+    		
+    		JScrollPane scrollPane = new JScrollPane(log);
+    		scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
+    		scrollPane.setPreferredSize(new Dimension(400, 125));
+    		DefaultCaret caret = (DefaultCaret)log.getCaret();
+    		caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
+    		
+    		retryButton.setPreferredSize(new Dimension(175, 25));
+    		retryButton.setActionCommand("retry");
+    		retryButton.addActionListener(this);
+    		retryButton.setEnabled(false);
+    		closeButton.setPreferredSize(new Dimension(175, 25));
+    		closeButton.setActionCommand("close");
+    		closeButton.addActionListener(this);
+    		closeButton.setEnabled(false);
     		
     		c.insets = new Insets(10, 10, 10, 10);
     		
@@ -216,7 +192,15 @@ public class Main
     		
     		c.insets = new Insets(10, 10, 10, 10);
     		
-    		this.addToGrid(log, 1, 3, 3, 1, pane, c);
+    		this.addToGrid(retryButton, 1, 5, 1, 1, pane, c);
+    		
+    		c.insets = new Insets(10, 10, 10, 10);
+    		
+    		this.addToGrid(closeButton, 3, 5, 1, 1, pane, c);
+    		
+    		c.insets = new Insets(10, 10, 10, 10);
+    		
+    		this.addToGrid(scrollPane, 1, 3, 3, 1, pane, c);
     		
     		log.setEditable(false);
     		
@@ -225,6 +209,19 @@ public class Main
     		this.pack();
     		this.setLocationRelativeTo(null);
     		this.setVisible(true);
+    	}
+    	
+    	public void actionPerformed(ActionEvent e) 
+    	{
+    	    if ("retry".equals(e.getActionCommand())) 
+    	    {
+    	    	retry = true;
+    	    }
+    	    else if ("close".equals(e.getActionCommand()))
+    	    {
+    	    	System.exit(0);
+    	    }
+    	    
     	}
     	
     	public final void addToGrid(Component comp, int gridx, int gridy, int gridwidth, double weightx,
